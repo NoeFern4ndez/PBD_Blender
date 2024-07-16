@@ -44,8 +44,6 @@ else:
 d_constraints = [] # distance constraints
 ec_constraints = [] # environmental collisions constraint
 particles = []
-initial_particles = []
-lengths = []
 Vdamp = 0.9999
 dt = 0.02
   
@@ -81,27 +79,25 @@ class xpbdIKMainPanel(bpy.types.Panel):
         row = layout.row()
         row.prop(scene, "niters")
         row.prop(scene, "ik_timer")
-        """
-        row = layout.row()
-        row.prop(context.object, "max_angle")
-        """
         
         row = layout.row()
         row.prop(context.object, "stiff")
-        # row.prop(context.object, "vstiff")
         
         row = layout.row()
         row.operator("object.setup")
         row = layout.row()
         row.label(text = "Breakable objects")
-        row.prop(context.object, "breakable")     
+        row.prop(context.object, "breakable") 
+        if context.object.breakable:
+            row = layout.row()
+            row.prop(context.object, "break_threshold") 
         
         if context.object.setted_up and context.object.mode == "EDIT": 
             row = layout.row()
             row.operator("object.bloq_vertex")  
             row = layout.row()
             row.operator("object.mptv")
-            
+    
         row = layout.row()
         row.label(text = "Force to apply")
         row.prop(context.object, "xforce")     
@@ -181,10 +177,9 @@ class Move_particle_to_vertex(bpy.types.Operator):
 """ FUNCTIONS """    
 def setup_xpbd(context, obj):
     
-    d_constraints.clear() 
+    d_constraints.clear()
+    ec_constraints.clear() 
     particles.clear()
-    initial_particles.clear()
-    lengths.clear()
 
     obj.setted_up = True
     if obj.type == 'MESH':
@@ -207,35 +202,19 @@ def setup_xpbd(context, obj):
    
         for v in vertices:
             p = prt.Particle(v.co, velocity, Vdamp)
-            """
-            pi = prt.Particle(v.co, velocity, Vdamp)
-            pi.set_bloqueada(True)
-            """
             particles.append(p)
-            """
-            initial_particles.append(pi)
-            c = cns.DistanceConstraint(pi, p, 0, obj.vstiff)
-            c.compute_k_coef(context.scene.niters)
-            v_constraints.append(c)
-            """
-            
+
         for e in edges:
             if mesh.vertices[e[0]] in vertices and mesh.vertices[e[1]] in vertices:
                 i1 = vertices.index(mesh.vertices[e[0]])
                 p1 = particles[i1]
-                # pi1 = initial_particles[i1]
                 i2 = vertices.index(mesh.vertices[e[1]])
                 p2 = particles[i2]
-                # pi2 = initial_particles[i2]
                 length = (p2.location - p1.location).length
                 c = cns.DistanceConstraint(p1, p2, length, obj.stiff)
                 c.compute_k_coef(context.scene.niters)
                 d_constraints.append(c)
-                """
-                c = cns.DistanceConstraint(pi1, pi2, length, obj.stiff)
-                c.compute_k_coef(context.scene.niters)
-                d_constraints.append(c)
-                """
+
                 
         bpy.ops.object.mode_set(mode = "EDIT")
                
@@ -269,14 +248,6 @@ def update_xpbd(context : bpy.types.Context):
                 
         for c in ec_constraints:
             c.proyecta_restriccion()
-            
-    """     
-    for i in range(1):    
-        for c in v_constraints:
-            if c.stiffness != obj.vstiff:
-                c.change_stiff(obj.vstiff, scene.niters)
-            c.proyecta_restriccion()
-    """
         
     for p in particles:
         p.update_pbd_vel(dt)
@@ -284,6 +255,9 @@ def update_xpbd(context : bpy.types.Context):
     # Aplicar las posiciones a la mesh 
     apply_positions_to_mesh(obj)
    
+"""
+Apply PBD calculated new positions to mesh vertices 
+"""
 def apply_positions_to_mesh(obj):
     # Recorre los vértices y actualiza sus posiciones
     bpy.ops.object.mode_set(mode='EDIT')
@@ -293,8 +267,9 @@ def apply_positions_to_mesh(obj):
         if i < len(particles):
             p = particles[i]
             vertice.co = p.location
+            # If the option of breaking the mesh is enabled, check if particle velocity is greater than the threshold
             if obj.breakable:
-                if p.velocity.length > 200:
+                if p.velocity.length > obj.break_threshold:
                     vertice.select = True
         
     bpy.ops.object.mode_set(mode='EDIT')
@@ -338,27 +313,7 @@ def point_inside_bbox(obj, point):
     max_z = max(bbox, key=lambda p: p.z).z
     
     # Comprueba si el punto está dentro de la bounding box
-    return (min_x <= point.x <= max_x) and (min_y <= point.y <= max_y) and (min_z <= point.z <= max_z)
-
-
-"""
-def set_environment_collisions(context, obj):
-    scene = context.scene
-    ec_constraints.clear()
-    
-    for p in particles:
-        ray_dir = p.velocity.normalized()
-            
-        origin = p.location
-        hit, location, normal, face_index = obj.ray_cast(origin, ray_dir)
-        
-        if hit: 
-            c = cns.EnvironmentCollisionConstraint(p, normal, 0, obj.stiff)
-            c.compute_k_coef(scene.niters)
-            ec_constraints.append(c)
-"""
-            
-           
+    return (min_x <= point.x <= max_x) and (min_y <= point.y <= max_y) and (min_z <= point.z <= max_z)         
         
 def move_target(a,b):
     """
@@ -451,6 +406,11 @@ def register():
     bpy.types.Object.breakable = bpy.props.BoolProperty(name = "Breakable",
                                                             description = "Determines if the meshes are breakable or not", 
                                                             default = False)
+    
+    bpy.types.Object.break_threshold = bpy.props.FloatProperty(name = "Break threshold",
+                                                            description = "Determines the threshold to break a mesh", 
+                                                            min = 0.00000001,
+                                                            default = 200)
     
     # CLASSES
     for cl in classes:
