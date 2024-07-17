@@ -13,18 +13,18 @@ from mathutils import Vector, Quaternion
 import math
 import numpy as np
 import random
-
+    
 bl_info = {
-    "name": "ERGO-IK",
+    "name": "PBD",
     "author": "Noé Fernández González",
     "version": (0, 0, 0),
     "blender": (3, 6, 0),
-    "location": "3D View > Panel > xpbdik",
-    "description": "Inverse kinematics solver using xpbd",
+    "location": "3D View > Panel > xpbd",
+    "description": "XPBD implementation",
     "warning": "",
     "wiki_url": "",
     "tracker_url": "",
-    "category": "IK"}
+    "category": "xpbd"}
 
 if __name__ == "ergoik":
     from importlib import reload
@@ -42,23 +42,23 @@ else:
     
 """ CONSTRAINT ARRAY"""  
 d_constraints = [] # distance constraints
+tb_constraints = [] # triangle bending constraints  
 ec_constraints = [] # environmental collisions constraint
 particles = []
-Vdamp = 0.9999
-dt = 0.02
+
   
 """ PANELS """
 
 class xpbdIKMainPanel(bpy.types.Panel):
-    """ Implements a Panel to control inverse kinematics
+    """ Implements a Panel to control PBD
     
-    Main control panel for xpbdIK
+    Main control panel for xpbd
     """
-    bl_label = "xpbdIK control panel"
-    bl_idname = "ARMATURE_PT_xpbdIK"
+    bl_label = "xpbd main panel"
+    bl_idname = "OBJ_xpbd_main"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
-    bl_category = "xpbdIK"
+    bl_category = "xpbd"
 
     def draw(self, context : bpy.types.Context) -> None:
         """
@@ -78,10 +78,10 @@ class xpbdIKMainPanel(bpy.types.Panel):
         scene = context.scene
         row = layout.row()
         row.prop(scene, "niters")
-        row.prop(scene, "ik_timer")
-        
+        row.prop(scene, "dt")
         row = layout.row()
-        row.prop(context.object, "stiff")
+        row.prop(scene, "ik_timer")
+        row.prop(context.object, "vdamp")
         
         row = layout.row()
         row.operator("object.setup")
@@ -97,12 +97,58 @@ class xpbdIKMainPanel(bpy.types.Panel):
             row.operator("object.bloq_vertex")  
             row = layout.row()
             row.operator("object.mptv")
+            
+        row = layout.row() 
+        row.label(text = "Constraints to apply")
+        row = layout.row() 
+        row.prop(context.object, "distance_constraint")
+        row.prop(context.object, "triangle_bending")
     
+        
+class xpbdIKConstraintsPanel(bpy.types.Panel):
+    """ Implements a Panel to control PBD constraints
+    
+    Constraints control panel for xpbd
+    """
+    bl_label = "xpbd constraints panel"
+    bl_idname = "OBJ_xpbd_constraints"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "xpbd_constraints"
+
+    def draw(self, context : bpy.types.Context) -> None:
+        """
+        Draw function for the panel
+
+        Parameters
+        ----------
+        context : bpy.types.Context
+            Context in which the panel is created
+
+        Returns
+        -------
+        None.
+
+        """
+        layout = self.layout
+        scene = context.scene
+        
         row = layout.row()
-        row.label(text = "Force to apply")
-        row.prop(context.object, "xforce")     
-        row.prop(context.object, "yforce")     
-        row.prop(context.object, "zforce")     
+        row.prop(context.object, "force") 
+        
+        if context.object.distance_constraint:
+            row = layout.row()
+            row.label(text = "Distance constraints")
+            row = layout.row()
+            row.prop(context.object, "dstiff", slider = True)    
+            
+        if context.object.triangle_bending:
+            row = layout.row()
+            row.label(text = "Triangle bending constraints")
+            row = layout.row()
+            row.prop(context.object, "tbstiff", slider = True)
+            row = layout.row()
+            row.prop(context.object, "kbend", slider = True)  
    
         
 """ OPERATORS """    
@@ -178,6 +224,7 @@ class Move_particle_to_vertex(bpy.types.Operator):
 def setup_xpbd(context, obj):
     
     d_constraints.clear()
+    tb_constraints.clear()
     ec_constraints.clear() 
     particles.clear()
 
@@ -201,21 +248,69 @@ def setup_xpbd(context, obj):
         velocity = Vector((0.0, 0.0, 0.0))
    
         for v in vertices:
-            p = prt.Particle(v.co, velocity, Vdamp)
+            p = prt.Particle(v.co, velocity, obj.vdamp)
             particles.append(p)
 
-        for e in edges:
-            if mesh.vertices[e[0]] in vertices and mesh.vertices[e[1]] in vertices:
-                i1 = vertices.index(mesh.vertices[e[0]])
-                p1 = particles[i1]
-                i2 = vertices.index(mesh.vertices[e[1]])
-                p2 = particles[i2]
-                length = (p2.location - p1.location).length
-                c = cns.DistanceConstraint(p1, p2, length, obj.stiff)
-                c.compute_k_coef(context.scene.niters)
-                d_constraints.append(c)
+        """ 
+            Distance constraints creation
+        """
+        if obj.distance_constraint:
+            for e in edges:
+                if mesh.vertices[e[0]] in vertices and mesh.vertices[e[1]] in vertices:
+                    i1 = vertices.index(mesh.vertices[e[0]])
+                    p1 = particles[i1]
+                    i2 = vertices.index(mesh.vertices[e[1]])
+                    p2 = particles[i2]
+                    length = (p2.location - p1.location).length
+                    c = cns.DistanceConstraint(p1, p2, length, obj.dstiff)
+                    c.compute_k_coef(context.scene.niters)
+                    d_constraints.append(c)
+                    
+        """
+            Triangle bending constraints creation
+        """
+        if obj.triangle_bending:
+            for face in mesh.polygons:
+                if len(face.vertices) == 4:
+                    v1 = mesh.vertices[face.vertices[0]]
+                    v2 = mesh.vertices[face.vertices[1]]
+                    v3 = mesh.vertices[face.vertices[2]]
+                    v4 = mesh.vertices[face.vertices[3]]
+                    
+                    i1 = vertices.index(v1)
+                    p1 = particles[i1]
+                    i2 = vertices.index(v2)
+                    p2 = particles[i2]
+                    i3 = vertices.index(v3)
+                    p3 = particles[i3]
+                    i4 = vertices.index(v4)
+                    p4 = particles[i4]
+                    
+                    # Create constraints for each triangle
+                    centroid = (p1.location + p2.location + p3.location) / 3
+                    h0 = (p1.location - centroid).length
+                    c1 = cns.TriangleBendingConstraint(p2, p3, p1, h0, obj.kbend, obj.tbstiff)
+                    c1.compute_k_coef(context.scene.niters)
+                    tb_constraints.append(c1)
+                    
+                    centroid = (p2.location + p3.location + p4.location) / 3
+                    h0 = (p4.location - centroid).length
+                    c2 = cns.TriangleBendingConstraint(p2, p3, p4, h0, obj.kbend, obj.tbstiff)
+                    c2.compute_k_coef(context.scene.niters)
+                    tb_constraints.append(c2)
+                    
+                    centroid = (p1.location + p3.location + p4.location) / 3
+                    h0 = (p3.location - centroid).length
+                    c3 = cns.TriangleBendingConstraint(p4, p1, p3, h0, obj.kbend, obj.tbstiff)
+                    c3.compute_k_coef(context.scene.niters)
+                    tb_constraints.append(c3)
+                    
+                    centroid = (p1.location + p2.location + p4.location) / 3
+                    h0 = (p2.location - centroid).length
+                    c4 = cns.TriangleBendingConstraint(p1, p4, p2, h0, obj.kbend, obj.tbstiff)
+                    c4.compute_k_coef(context.scene.niters)
+                    tb_constraints.append(c4)
 
-                
         bpy.ops.object.mode_set(mode = "EDIT")
                
     else:
@@ -229,12 +324,15 @@ def update_xpbd(context : bpy.types.Context):
         set_environment_collisions(context, obj)
     
     for p in particles:
-        p.force = Vector((obj.xforce,obj.yforce,obj.zforce))
+        p.force = Vector((obj.force[0],obj.force[1],obj.force[2]))
             
     for p in particles:
-        p.update(dt)
+        p.update(scene.dt)
 
     for c in d_constraints:
+        c.lambda_val = 0
+        
+    for c in tb_constraints:
         c.lambda_val = 0
 
     for c in ec_constraints:
@@ -242,15 +340,22 @@ def update_xpbd(context : bpy.types.Context):
 
     for i in range(scene.niters):
         for c in d_constraints:
-            if c.stiffness != obj.stiff:
-                c.change_stiff(obj.stiff, scene.niters)
+            if c.stiffness != obj.dstiff:
+                c.change_stiff(obj.dstiff, scene.niters)
+            c.proyecta_restriccion()
+            
+        for c in tb_constraints:
+            if c.stiffness != obj.tbstiff:
+                c.change_stiff(obj.tbstiff, scene.niters)
+            if c.bendk != obj.kbend:
+                c.change_bendk(obj.kbend)
             c.proyecta_restriccion()
                 
         for c in ec_constraints:
             c.proyecta_restriccion()
         
     for p in particles:
-        p.update_pbd_vel(dt)
+        p.update_pbd_vel(scene.dt)
 
     # Aplicar las posiciones a la mesh 
     apply_positions_to_mesh(obj)
@@ -343,6 +448,7 @@ def target_moved():
 # used by panels) have to be defined first.
 classes = [
         xpbdIKMainPanel,
+        xpbdIKConstraintsPanel,
         Bloq_vertex,
         Move_particle_to_vertex,
         Setup
@@ -363,41 +469,63 @@ def register():
                                                             description = "Number of iterations to solve xpbd", 
                                                             min = 1, 
                                                             default = 120)
-    
-    bpy.types.Object.max_angle = bpy.props.IntProperty(name = "Angle constraint º", 
-                                                            description = "Angle set as maximum in angular constraint", 
-                                                            min = 1, 
-                                                            max = 180,
-                                                            default = 120)
-    
+
     bpy.types.Scene.ik_timer = bpy.props.FloatProperty(name = "IK timer", 
                                                             description = "Timer between ik updates", 
                                                             min = 0.0001, 
                                                             default = 0.01)
     
-    bpy.types.Object.stiff = bpy.props.FloatProperty(name = "Distance constraint stiff", 
+    bpy.types.Scene.dt = bpy.props.FloatProperty(name = "Time step",
+                                                            description = "Time step for the simulation", 
+                                                            min = 0.0001, 
+                                                            default = 0.02)
+    
+    bpy.types.Object.vdamp = bpy.props.FloatProperty(name = "Velocity damping",
+                                                            description = "Velocity damping factor", 
+                                                            min = 0.0001,
+                                                            max = 1, 
+                                                            default = 0.99)
+    
+    """ 
+        Distance constraint properties
+    """
+    
+    bpy.types.Object.distance_constraint = bpy.props.BoolProperty(name = "Distance constraint",
+                                                            description = "Determines if the distance constraints are applied", 
+                                                            default = True)
+    
+    bpy.types.Object.dstiff = bpy.props.FloatProperty(name = "Distance constraint stiff", 
                                                             description = "Stiffness between 0 and 1 of distance constraint", 
                                                             min = 0.00000001, 
                                                             max = 1,
                                                             default = 0.5)
     
-    bpy.types.Object.xforce = bpy.props.FloatProperty(name = "X Force", 
-                                                            description = "Force to apply in X axis", 
-                                                            default = 0.0)
+    """
+        Triangle bending constraint properties
+    """
     
-    bpy.types.Object.yforce = bpy.props.FloatProperty(name = "Y Force", 
-                                                            description = "Force to apply in Y axis", 
-                                                            default = 0.0)
+    bpy.types.Object.triangle_bending = bpy.props.BoolProperty(name = "Triangle bending constraint",
+                                                            description = "Determines if the triangle bending constraints are applied", 
+                                                            default = False)
     
-    bpy.types.Object.zforce = bpy.props.FloatProperty(name = "Z Force", 
-                                                            description = "Force to apply in Z axis", 
-                                                            default = -9.81)
-    
-    bpy.types.Object.vstiff = bpy.props.FloatProperty(name = "Volume constraint stiff", 
-                                                            description = "Stiffness between 0 and 1 of volume constraint", 
+    bpy.types.Object.tbstiff = bpy.props.FloatProperty(name = "Triangle bending constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of triangle bending constraint", 
                                                             min = 0.00000001, 
                                                             max = 1,
                                                             default = 0.5)
+    
+    bpy.types.Object.kbend = bpy.props.FloatProperty(name = "Bending parameter",
+                                                        description = "Bending parameter for triangle bending constraint",
+                                                        min = 0.0,
+                                                        max = 1.0,
+                                                        default = 0.0)
+
+    """
+    """
+    bpy.types.Object.force = bpy.props.FloatVectorProperty(name = "External forces",
+                                                            description = "Force to apply in X, Y and Z axis", 
+                                                            size = 3,
+                                                            default = (0.0, 0.0, -9.81))
     
     bpy.types.Object.setted_up = bpy.props.BoolProperty(name = "Object setted up",
                                                             description = "Checks if an object has been setted up", 
@@ -436,15 +564,7 @@ def unregister():
     for cl in classes:
         bpy.utils.unregister_class(cl)
 
-    """
-    del bpy.types.Armature.ergoik_grips_hidden
-    del bpy.types.Armature.ergoik_reach_influence
-    
-    # DRIVERS
-    del bpy.app.driver_namespace['get_stiff']
-    """
     del bpy.types.Scene.niters
-    del bpy.types.Object.max_angle
     del bpy.types.Object.last_pos
     del bpy.types.Object.xforce
     del bpy.types.Object.yforce

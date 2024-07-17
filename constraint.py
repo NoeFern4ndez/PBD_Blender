@@ -133,7 +133,103 @@ class DistanceConstraint(Constraint):
         self.stiffness = stiff
         self.compute_k_coef(niters)
             
+
+class TriangleBendingConstraint(Constraint):
+    """
+        Class that extends Constraint to define a bending constraint
+        ref: http://image.diku.dk/kenny/download/kelager.niebe.ea10.pdf
+    """
+    bl_idname = "object.triangle_bending_constraint"
+    bl_label = "triangle bending constraint"
+    bl_options = {'UNDO'}
+    
+    def __init__(self, b0, b1, v, h0, bendk, k):
+        """
+            Init function
+        
+        """
+        super().__init__()
+        self.h0 = h0
+        self.particles.extend([b0, b1, v])
+        self.bendk = bendk
+        self.stiffness = k
+        self.k_coef = self.stiffness
+        self.lambda_val = 0.0
+
+    def proyecta_restriccion(self):
+        """
+            Proyects distance constraint in pbd
+        
+        """
+        # get particles involved
+        b0 = self.particles[0]
+        b1 = self.particles[1]
+        v = self.particles[2]
+
+        # get 1/mass
+        wb0 = b0.w
+        wb1 = b1.w
+        wv = v.w
+        W = wb0 + wb1 + 2 * wv
+        
+        # get centroid of the triangle c = (b0 + b1 + v) / 3
+        c = (b0.location + b1.location + v.location) / 3
+        
+        # get h1 = |v - c|, h0 = h0, bendk
+        h1 = (v.location - c).length
+        h0 = self.h0
+        bendk = self.bendk
+        
+        # check if both inverse masses are different from 0
+        if W > 0.0005 and h1 != 0:
+            # get C = h1 - (bendk + h0) 
+            C = h1 - (bendk + h0)
             
+            # get ∆Cb0 = 2wb0 / W * (v - c) * (1 - (bendk + h0) / h1)
+            dCb0 = 2 * wb0 / W * (v.location - c) * (1 - (bendk + h0) / h1)
+            # get ∆Cb1 = 2wb1 / W * (v - c) * (1 - (bendk + h0) / h1)
+            dCb1 = 2 * wb1 / W * (v.location - c) * (1 - (bendk + h0) / h1)
+            # get ∆Cv = -4wv / W * (v - c) * (1 - (bendk + h0) / h1)
+            dCv = -4 * wv / W * (v.location - c) * (1 - (bendk + h0) / h1)
+            
+            # # get ∆C = ∆C^2 = ∆Cb0^2 + ∆Cb1^2 + ∆Cv^2
+            # dC = dCb0.dot(dCb0) + dCb1.dot(dCb1) + dCv.dot(dCv)
+
+            # # Get lambda variations
+            # # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
+            # deltalambdab0 = (-C - self.k_coef * self.lambda_val) / (dC * W1 + self.k_coef)
+            # # ∆λ2 = (−C2 - k' * λ2)/(dC^2 * W2 + k')
+            # deltalambdab1 = (-C - self.k_coef * self.lambda_val) / (dC * W2 + self.k_coef)
+            # # ∆λ3 = (−C3 - k' * λ3)/(dC^2 * W3 + k')
+            # deltalambdav = (-C - self.k_coef * self.lambda_val) / (dC * W3 + self.k_coef)
+
+            # # Get position variations
+            # # ∆x1 = W1 * dC1 * ∆λ1
+            # deltab0 = W1 * dCb0 * deltalambdab0
+            # # ∆x2 = W2 * dC2 * ∆λ2
+            # deltab1 = W2 * dCb1 * deltalambdab1
+            # # ∆x3 = W3 * dC3 * ∆λ3
+            # deltav = W3 * dCv * deltalambdav
+
+            # Update lambdas and positions
+            # self.lambda_val += deltalambdab0
+            # self.lambda_val += deltalambdab1
+            # self.lambda_val += deltalambdav
+            # b0.location += deltab0
+            # b1.location += deltab1
+            # v.location += deltav
+            b0.location += dCb0
+            b1.location += dCb1
+            v.location += dCv
+                            
+    def change_stiff(self, stiff, niters):
+        self.stiffness = stiff
+        self.compute_k_coef(niters)
+        
+    def change_bendk(self, bendk):
+        self.bendk = bendk
+    
+
 class EnvironmentCollisionConstraint(Constraint):
     """
         Class that extends Constraint to define a distance constraint
@@ -195,9 +291,6 @@ class EnvironmentCollisionConstraint(Constraint):
                 self.lambda_val += deltalambda1 
                 part1.location += deltap1
             
-                
-
-
     def change_stiff(self, stiff, niters):
         self.stiffness = stiff
         self.compute_k_coef(niters)
