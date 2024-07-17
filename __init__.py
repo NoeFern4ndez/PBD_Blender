@@ -103,6 +103,8 @@ class xpbdIKMainPanel(bpy.types.Panel):
         row = layout.row() 
         row.prop(context.object, "distance_constraint")
         row.prop(context.object, "triangle_bending")
+        row = layout.row()
+        row.prop(context.object, "environmental_collisions")
     
         
 class xpbdIKConstraintsPanel(bpy.types.Panel):
@@ -148,7 +150,15 @@ class xpbdIKConstraintsPanel(bpy.types.Panel):
             row = layout.row()
             row.prop(context.object, "tbstiff", slider = True)
             row = layout.row()
-            row.prop(context.object, "kbend", slider = True)  
+            row.prop(context.object, "kbend", slider = True)
+
+        if context.object.environmental_collisions:
+            row = layout.row()
+            row.label(text = "Environmental collisions constraints")
+            row = layout.row()
+            row.prop(context.object, "ec_type")
+            row = layout.row()
+            row.prop(context.object, "ecstiff", slider = True)  
    
         
 """ OPERATORS """    
@@ -320,8 +330,11 @@ def update_xpbd(context : bpy.types.Context):
     scene = context.scene
     obj = context.object
     
-    if len(particles) > 0:
-        set_environment_collisions(context, obj)
+    if len(particles) > 0 and obj.environmental_collisions:
+        if obj.ec_type == "SPH":
+            set_environment_collisions_sphere(context, obj)
+        elif obj.ec_type == "BBOX":
+            set_environment_collisions_bbox(context, obj)
     
     for p in particles:
         p.force = Vector((obj.force[0],obj.force[1],obj.force[2]))
@@ -339,20 +352,23 @@ def update_xpbd(context : bpy.types.Context):
         c.lambda_val = 0
 
     for i in range(scene.niters):
-        for c in d_constraints:
-            if c.stiffness != obj.dstiff:
-                c.change_stiff(obj.dstiff, scene.niters)
-            c.proyecta_restriccion()
-            
-        for c in tb_constraints:
-            if c.stiffness != obj.tbstiff:
-                c.change_stiff(obj.tbstiff, scene.niters)
-            if c.bendk != obj.kbend:
-                c.change_bendk(obj.kbend)
-            c.proyecta_restriccion()
-                
-        for c in ec_constraints:
-            c.proyecta_restriccion()
+        if obj.distance_constraint:
+            for c in d_constraints:
+                if c.stiffness != obj.dstiff:
+                    c.change_stiff(obj.dstiff, scene.niters)
+                c.proyecta_restriccion()
+        
+        if obj.triangle_bending:
+            for c in tb_constraints:
+                if c.stiffness != obj.tbstiff:
+                    c.change_stiff(obj.tbstiff, scene.niters)
+                if c.bendk != obj.kbend:
+                    c.change_bendk(obj.kbend)
+                c.proyecta_restriccion()
+
+        if obj.environmental_collisions:     
+            for c in ec_constraints:
+                c.proyecta_restriccion()
         
     for p in particles:
         p.update_pbd_vel(scene.dt)
@@ -382,7 +398,29 @@ def apply_positions_to_mesh(obj):
     bpy.ops.object.mode_set(mode='OBJECT')
 
 
-def set_environment_collisions(context, obj):
+def set_environment_collisions_sphere(context, obj):
+    scene = context.scene
+    ec_constraints.clear()
+
+    # Check every object in the scene
+    for ob in bpy.data.objects:
+        # Check if the object is a mesh and is not the same object as the one being simulated
+        if obj.name != ob.name and ob.type == 'MESH':
+            # Check if the distance between the object and the particles is less than an arbitrary value (to avoid unnecessary calculations)
+            if ((obj.matrix_world @ particles[0].location) - ob.location).length < 40:
+                # Calculate the radius of the sphere based on the distance between the origin and a vertex
+                radius = (ob.matrix_world @ ob.data.vertices[0].co - ob.location).length
+                # Checks if the distance between the particle and the object is less than the radius of the object
+                for p in particles:
+                    dist = (obj.matrix_world @ p.location - ob.location).length - radius
+                    if dist < 0.5:
+                        # add a collision constraint where the normal is the vector from the center of the sphere to the particle
+                        n = (obj.matrix_world @ particles[0].location - ob.location).normalized()
+                        c = cns.EnvironmentCollisionConstraint(p, n, 1, obj.ecstiff)
+                        c.compute_k_coef(scene.niters)
+                        ec_constraints.append(c)
+
+def set_environment_collisions_bbox(context, obj):
     scene = context.scene
     ec_constraints.clear()
     
@@ -394,7 +432,7 @@ def set_environment_collisions(context, obj):
                     if point_inside_bbox(ob, obj.matrix_world @ p.location):
                             for face in ob.data.polygons:
                                 if ((obj.matrix_world @ p.location) - (ob.matrix_world @ ob.data.vertices[face.vertices[0]].co)).dot(face.normal) < 0.5:
-                                            c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, 1)
+                                            c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff)
                                             c.compute_k_coef(scene.niters)
                                             ec_constraints.append(c)
                                 
@@ -506,7 +544,7 @@ def register():
     
     bpy.types.Object.triangle_bending = bpy.props.BoolProperty(name = "Triangle bending constraint",
                                                             description = "Determines if the triangle bending constraints are applied", 
-                                                            default = False)
+                                                            default = True)
     
     bpy.types.Object.tbstiff = bpy.props.FloatProperty(name = "Triangle bending constraint stiff",
                                                             description = "Stiffness between 0 and 1 of triangle bending constraint", 
@@ -521,7 +559,34 @@ def register():
                                                         default = 0.0)
 
     """
+        Environment collisions constraint properties
     """
+    bpy.types.Object.environmental_collisions = bpy.props.BoolProperty(name = "Environmental collisions constraint",
+                                                            description = "Determines if the environmental collisions constraints are applied", 
+                                                            default = True)
+
+    bpy.types.Object.ecstiff = bpy.props.FloatProperty(name = "Environment collisions constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of environment collisions constraint", 
+                                                            min = 0.00000001, 
+                                                            max = 1,
+                                                            default = 0.5)
+    
+    env_coll_type = [
+                ("BBOX","bounding_box","Bounding box based collision",1),
+                ("SPH","sphere","Sphere based collision",2),
+                ("NONE","none","No rotation constraints",4)
+                ]
+    bpy.types.Object.ec_type = bpy.props.EnumProperty(
+        items = env_coll_type,
+        name = "Environmental Collisions Type",
+        description = "Type of collision to apply",
+        default = "SPH",
+        )
+    
+
+    """
+    """
+    
     bpy.types.Object.force = bpy.props.FloatVectorProperty(name = "External forces",
                                                             description = "Force to apply in X, Y and Z axis", 
                                                             size = 3,

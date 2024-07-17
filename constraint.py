@@ -281,15 +281,14 @@ class EnvironmentCollisionConstraint(Constraint):
             # Get lambda variation
             # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
             deltalambda1 = (-C - self.k_coef * self.lambda_val) / (dC * w1 + self.k_coef)
-            deltalambda1 *= 0.01
             # Get position variation
             # ∆x1 = W1 * dC1 * ∆λ1
             deltap1 = w1 * dC1 * deltalambda1
      
-            if abs(n.dot(x) - self.d) >= 0.0005: 
-                # Update lambda and position
-                self.lambda_val += deltalambda1 
-                part1.location += deltap1
+            #if abs(n.dot(x) - self.d) >= 0.0005: 
+            # Update lambda and position
+            self.lambda_val += deltalambda1 
+            part1.location += deltap1
             
     def change_stiff(self, stiff, niters):
         self.stiffness = stiff
