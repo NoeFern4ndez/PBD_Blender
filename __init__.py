@@ -309,17 +309,17 @@ def setup_xpbd(context, obj):
                     c2.compute_k_coef(context.scene.niters)
                     tb_constraints.append(c2)
                     
-                    centroid = (p1.location + p3.location + p4.location) / 3
-                    h0 = (p3.location - centroid).length
-                    c3 = cns.TriangleBendingConstraint(p4, p1, p3, h0, obj.kbend, obj.tbstiff)
-                    c3.compute_k_coef(context.scene.niters)
-                    tb_constraints.append(c3)
+                    # centroid = (p1.location + p3.location + p4.location) / 3
+                    # h0 = (p3.location - centroid).length
+                    # c3 = cns.TriangleBendingConstraint(p4, p1, p3, h0, obj.kbend, obj.tbstiff)
+                    # c3.compute_k_coef(context.scene.niters)
+                    # tb_constraints.append(c3)
                     
-                    centroid = (p1.location + p2.location + p4.location) / 3
-                    h0 = (p2.location - centroid).length
-                    c4 = cns.TriangleBendingConstraint(p1, p4, p2, h0, obj.kbend, obj.tbstiff)
-                    c4.compute_k_coef(context.scene.niters)
-                    tb_constraints.append(c4)
+                    # centroid = (p1.location + p2.location + p4.location) / 3
+                    # h0 = (p2.location - centroid).length
+                    # c4 = cns.TriangleBendingConstraint(p1, p4, p2, h0, obj.kbend, obj.tbstiff)
+                    # c4.compute_k_coef(context.scene.niters)
+                    # tb_constraints.append(c4)
 
         bpy.ops.object.mode_set(mode = "EDIT")
                
@@ -405,7 +405,7 @@ def set_environment_collisions_sphere(context, obj):
     # Check every object in the scene
     for ob in bpy.data.objects:
         # Check if the object is a mesh and is not the same object as the one being simulated
-        if obj.name != ob.name and ob.type == 'MESH':
+        if obj.name != ob.name and ob.type == 'MESH' and "not_collide" not in ob.name:
             # Check if the distance between the object and the particles is less than an arbitrary value (to avoid unnecessary calculations)
             if ((obj.matrix_world @ particles[0].location) - ob.location).length < 20:
                 # Calculate the radius of the sphere based on the distance between the origin and a vertex
@@ -426,7 +426,7 @@ def set_environment_collisions_bbox(context, obj):
     
     # TODO: change this to only create collisions on desired objects
     for ob in bpy.data.objects:
-        if obj.name != ob.name and ob.type == 'MESH':
+        if obj.name != ob.name and ob.type == 'MESH'and "not_collide" not in ob.name:
             if ((obj.matrix_world @ particles[0].location) - ob.location).length < 40:
                 for p in particles:
                     if point_inside_bbox(ob, obj.matrix_world @ p.location):
