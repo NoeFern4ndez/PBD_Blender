@@ -44,6 +44,7 @@ else:
 d_constraints = [] # distance constraints
 tb_constraints = [] # triangle bending constraints  
 ec_constraints = [] # environmental collisions constraint
+setted_up_objects = []
 particles = []
 
   
@@ -171,7 +172,8 @@ class Setup(bpy.types.Operator):
         obj = context.object
         
         setup_xpbd(context, obj)
-        
+        if obj not in setted_up_objects:
+            setted_up_objects.append(obj)
         return {'FINISHED'}
     
 class Bloq_vertex(bpy.types.Operator):
@@ -501,7 +503,7 @@ def register():
     None.
 
     """
-    
+
     
     bpy.types.Scene.niters = bpy.props.IntProperty(name = "Constraint proyections Iterations", 
                                                             description = "Number of iterations to solve xpbd", 
