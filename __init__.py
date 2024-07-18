@@ -330,12 +330,6 @@ def update_xpbd(context : bpy.types.Context):
     scene = context.scene
     obj = context.object
     
-    if len(particles) > 0 and obj.environmental_collisions:
-        if obj.ec_type == "SPH":
-            set_environment_collisions_sphere(context, obj)
-        elif obj.ec_type == "BBOX":
-            set_environment_collisions_bbox(context, obj)
-    
     for p in particles:
         p.force = Vector((obj.force[0],obj.force[1],obj.force[2]))
             
@@ -350,6 +344,12 @@ def update_xpbd(context : bpy.types.Context):
 
     for c in ec_constraints:
         c.lambda_val = 0
+
+    if len(particles) > 0 and obj.environmental_collisions:
+        if obj.ec_type == "SPH":
+            set_environment_collisions_sphere(context, obj)
+        elif obj.ec_type == "BBOX":
+            set_environment_collisions_bbox(context, obj)
 
     for i in range(scene.niters):
         if obj.distance_constraint:
@@ -407,7 +407,7 @@ def set_environment_collisions_sphere(context, obj):
         # Check if the object is a mesh and is not the same object as the one being simulated
         if obj.name != ob.name and ob.type == 'MESH':
             # Check if the distance between the object and the particles is less than an arbitrary value (to avoid unnecessary calculations)
-            if ((obj.matrix_world @ particles[0].location) - ob.location).length < 40:
+            if ((obj.matrix_world @ particles[0].location) - ob.location).length < 20:
                 # Calculate the radius of the sphere based on the distance between the origin and a vertex
                 radius = (ob.matrix_world @ ob.data.vertices[0].co - ob.location).length
                 # Checks if the distance between the particle and the object is less than the radius of the object
@@ -416,7 +416,7 @@ def set_environment_collisions_sphere(context, obj):
                     if dist < 0.5:
                         # add a collision constraint where the normal is the vector from the center of the sphere to the particle
                         n = (obj.matrix_world @ particles[0].location - ob.location).normalized()
-                        c = cns.EnvironmentCollisionConstraint(p, n, 1, obj.ecstiff)
+                        c = cns.EnvironmentCollisionConstraint(p, n, 0, obj.ecstiff)
                         c.compute_k_coef(scene.niters)
                         ec_constraints.append(c)
 
