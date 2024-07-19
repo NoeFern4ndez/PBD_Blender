@@ -422,6 +422,7 @@ def set_environment_collisions_sphere(context, obj):
                         c.compute_k_coef(scene.niters)
                         ec_constraints.append(c)
 
+
 def set_environment_collisions_bbox(context, obj):
     scene = context.scene
     ec_constraints.clear()

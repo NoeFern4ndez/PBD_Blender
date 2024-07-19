@@ -182,6 +182,10 @@ class TriangleBendingConstraint(Constraint):
         
         # check if both inverse masses are different from 0
         if W > 0.0005 and h1 != 0:
+            W1 = wb0 / W
+            W2 = wb1 / W
+            W3 = wv / W
+
             # get C = h1 - (bendk + h0) 
             C = h1 - (bendk + h0)
             
@@ -192,24 +196,24 @@ class TriangleBendingConstraint(Constraint):
             # get ∆Cv = -4wv / W * (v - c) * (1 - (bendk + h0) / h1)
             dCv = -4 * wv / W * (v.location - c) * (1 - (bendk + h0) / h1)
             
-            # # get ∆C = ∆C^2 = ∆Cb0^2 + ∆Cb1^2 + ∆Cv^2
-            # dC = dCb0.dot(dCb0) + dCb1.dot(dCb1) + dCv.dot(dCv)
+            # get ∆C = ∆C^2 = ∆Cb0^2 + ∆Cb1^2 + ∆Cv^2
+            dC = dCb0.dot(dCb0) + dCb1.dot(dCb1) + dCv.dot(dCv)
 
-            # # Get lambda variations
-            # # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
-            # deltalambdab0 = (-C - self.k_coef * self.lambda_val) / (dC * W1 + self.k_coef)
-            # # ∆λ2 = (−C2 - k' * λ2)/(dC^2 * W2 + k')
-            # deltalambdab1 = (-C - self.k_coef * self.lambda_val) / (dC * W2 + self.k_coef)
-            # # ∆λ3 = (−C3 - k' * λ3)/(dC^2 * W3 + k')
-            # deltalambdav = (-C - self.k_coef * self.lambda_val) / (dC * W3 + self.k_coef)
+            # Get lambda variations: eq 17: ∆λ = (−C - k' * λ)/(dC^2 * W + k')
+            # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
+            deltalambdab0 = (-C - self.k_coef * self.lambda_val) / (dC * W1 + self.k_coef)
+            # ∆λ2 = (−C2 - k' * λ2)/(dC^2 * W2 + k')
+            deltalambdab1 = (-C - self.k_coef * self.lambda_val) / (dC * W2 + self.k_coef)
+            # ∆λ3 = (−C3 - k' * λ3)/(dC^2 * W3 + k')
+            deltalambdav = (-C - self.k_coef * self.lambda_val) / (dC * W3 + self.k_coef)
 
-            # # Get position variations
-            # # ∆x1 = W1 * dC1 * ∆λ1
-            # deltab0 = W1 * dCb0 * deltalambdab0
-            # # ∆x2 = W2 * dC2 * ∆λ2
-            # deltab1 = W2 * dCb1 * deltalambdab1
-            # # ∆x3 = W3 * dC3 * ∆λ3
-            # deltav = W3 * dCv * deltalambdav
+            # Get position variations: eq 18: ∆x = W * dC * ∆λ
+            # ∆x1 = W1 * dC1 * ∆λ1
+            deltab0 = W1 * dCb0 * deltalambdab0
+            # ∆x2 = W2 * dC2 * ∆λ2
+            deltab1 = W2 * dCb1 * deltalambdab1
+            # ∆x3 = W3 * dC3 * ∆λ3
+            deltav = W3 * dCv * deltalambdav
 
             # Update lambdas and positions
             # self.lambda_val += deltalambdab0
