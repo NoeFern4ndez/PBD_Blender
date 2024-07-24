@@ -42,6 +42,7 @@ else:
     
 """ CONSTRAINT ARRAY"""  
 d_constraints = [] # distance constraints
+b_constraints = [] # bending constraints
 tb_constraints = [] # triangle bending constraints  
 ec_constraints = [] # environmental collisions constraint
 setted_up_objects = []
@@ -103,8 +104,9 @@ class xpbdIKMainPanel(bpy.types.Panel):
         row.label(text = "Constraints to apply")
         row = layout.row() 
         row.prop(context.object, "distance_constraint")
-        row.prop(context.object, "triangle_bending")
+        row.prop(context.object, "bending")
         row = layout.row()
+        row.prop(context.object, "triangle_bending")
         row.prop(context.object, "environmental_collisions")
     
         
@@ -143,7 +145,15 @@ class xpbdIKConstraintsPanel(bpy.types.Panel):
             row = layout.row()
             row.label(text = "Distance constraints")
             row = layout.row()
-            row.prop(context.object, "dstiff", slider = True)    
+            row.prop(context.object, "dstiff", slider = True)  
+
+        if context.object.bending:
+            row = layout.row()
+            row.label(text = "Bending constraints")
+            row = layout.row()
+            row.prop(context.object, "bstiff", slider = True)
+            row = layout.row()
+            row.prop(context.object, "bend_phi", slider = True)  
             
         if context.object.triangle_bending:
             row = layout.row()
@@ -236,6 +246,7 @@ class Move_particle_to_vertex(bpy.types.Operator):
 def setup_xpbd(context, obj):
     
     d_constraints.clear()
+    b_constraints.clear()
     tb_constraints.clear()
     ec_constraints.clear() 
     particles.clear()
@@ -277,6 +288,31 @@ def setup_xpbd(context, obj):
                     c = cns.DistanceConstraint(p1, p2, length, obj.dstiff)
                     c.compute_k_coef(context.scene.niters)
                     d_constraints.append(c)
+
+        """
+            Bending constraints creation
+        """
+        if obj.bending:
+            for face in mesh.polygons:
+                if len(face.vertices) == 4:
+                    v1 = mesh.vertices[face.vertices[0]]
+                    v2 = mesh.vertices[face.vertices[1]]
+                    v3 = mesh.vertices[face.vertices[2]]
+                    v4 = mesh.vertices[face.vertices[3]]
+                    
+                    i1 = vertices.index(v1)
+                    p1 = particles[i1]
+                    i2 = vertices.index(v2)
+                    p2 = particles[i2]
+                    i3 = vertices.index(v3)
+                    p3 = particles[i3]
+                    i4 = vertices.index(v4)
+                    p4 = particles[i4]
+                    
+                    # Create constraints for each face
+                    c1 = cns.BendingConstraint(p1, p2, p3, p4, obj.bstiff, obj.bend_phi)
+                    c1.compute_k_coef(context.scene.niters)
+                    b_constraints.append(c1)
                     
         """
             Triangle bending constraints creation
@@ -340,7 +376,10 @@ def update_xpbd(context : bpy.types.Context):
 
     for c in d_constraints:
         c.lambda_val = 0
-        
+
+    for c in b_constraints:
+        c.lambda_val = 0
+
     for c in tb_constraints:
         c.lambda_val = 0
 
@@ -360,6 +399,14 @@ def update_xpbd(context : bpy.types.Context):
                     c.change_stiff(obj.dstiff, scene.niters)
                 c.proyecta_restriccion()
         
+        if obj.bending:
+            for c in b_constraints:
+                if c.stiffness != obj.bstiff:
+                    c.change_stiff(obj.bstiff, scene.niters)
+                if c.phi != obj.bend_phi:
+                    c.change_phi(obj.bend_phi)
+                c.proyecta_restriccion()
+
         if obj.triangle_bending:
             for c in tb_constraints:
                 if c.stiffness != obj.tbstiff:
@@ -540,6 +587,26 @@ def register():
                                                             min = 0.00000001, 
                                                             max = 1,
                                                             default = 0.5)
+    
+    """
+        Bending constraint properties
+    """
+    
+    bpy.types.Object.bending = bpy.props.BoolProperty(name = "Bending constraint",
+                                                            description = "Determines if the bending constraints are applied", 
+                                                            default = True)
+    
+    bpy.types.Object.bstiff = bpy.props.FloatProperty(name = "Bending constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of bending constraint", 
+                                                            min = 0.00000001, 
+                                                            max = 1,
+                                                            default = 0.5)
+    
+    bpy.types.Object.bend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
+                                                        description = "Angle phi for bending constraint",
+                                                        min = -360.0,
+                                                        max = 360.0,
+                                                        default = 0.0)
     
     """
         Triangle bending constraint properties

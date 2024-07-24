@@ -123,16 +123,138 @@ class DistanceConstraint(Constraint):
             deltap2 = W2 * dC2 * deltalambda2
 
             # Update lambdas and positions
-            if abs(vd.length - self.d) >= 0.0005:
-                self.lambda_val += deltalambda1
-                self.lambda_val += deltalambda2
-                part1.location += deltap1
-                part2.location += deltap2
+            self.lambda_val += deltalambda1
+            self.lambda_val += deltalambda2
+            part1.location += deltap1
+            part2.location += deltap2
                 
     def change_stiff(self, stiff, niters):
         self.stiffness = stiff
         self.compute_k_coef(niters)
             
+class BendingConstraint(Constraint):
+    """
+        Class that extends Constraint to define a bending constraint
+        ref: https://matthias-research.github.io/pages/publications/posBasedDyn.pdf
+    """
+    bl_idname = "object.bending_constraint"
+    bl_label = "bending constraint"
+    bl_options = {'UNDO'}
+    
+    def __init__(self, p1, p2, p3, p4, phi, k):
+        """
+            Init function
+        
+        """
+        super().__init__()
+        self.particles.extend([p1, p2, p3, p4])
+        self.phi = math.radians(phi)
+        self.stiffness = k
+        self.k_coef = self.stiffness
+        self.lambda_val = 0.0
+
+    def proyecta_restriccion(self):
+        """
+            Proyects bending constraint in pbd
+        
+        """
+        # get particles involved
+        p1 = self.particles[0]
+        p2 = self.particles[1]
+        p3 = self.particles[2]
+        p4 = self.particles[3]
+
+        l1 = p1.location
+        l2 = p2.location
+        l3 = p3.location
+        l4 = p4.location
+
+        # get 1/mass
+        w1 = p1.w
+        w2 = p2.w
+        w3 = p3.w
+        w4 = p4.w
+        W = w1 + w2 + w3 + w4
+
+        # n1 = (p2 x p3) / |p2 x p3|
+        n1 = l2.cross(l3).normalized()
+        # n2 = (p2 x p4) / |p2 x p4|
+        n2 = l2.cross(l4).normalized()
+        
+        # d = n1 . n2
+        d = n1.dot(n2)
+        
+        # check if both inverse masses are different from 0
+        if W > 0.0005 :
+            # get Wi = wi / W
+            W1 = w1 / W
+            W2 = w2 / W
+            W3 = w3 / W
+            W4 = w4 / W
+
+            # get C = arcos(d) - phi = d - cos(phi)
+            C = d - math.cos(self.phi)
+            
+            sq = math.sqrt(1 - d * d)
+            if sq < 0.0005:
+                sq = 0.0005
+            # get ∆Cp3 = - 1 / sqrt(1 - d^2) * ((∂n1 / ∂p3)^T * n2)
+            # aux3 = (∂n1 / ∂p3)^T = -1 / |p2 x p3| * [ -p2 + (p2 x p3) * ((p2 x p3) x p2)^T]
+            aux3 = -1 / l2.cross(l3).length * (-l2 + l2.cross(l3) * l2.cross(l3).cross(l2).normalized())
+            dCp3 = -1 / sq * (aux3 * n2)
+            # get ∆Cp4 = - 1 / sqrt(1 - d^2) * ((∂n2 / ∂p4)^T * n1)
+            # aux4 = (∂n2 / ∂p4)^T = -1 / |p2 x p4| * [ -p2 + (p2 x p4) * ((p2 x p4) x p2)^T]
+            aux4 = -1 / l2.cross(l4).length * (-l2 + l2.cross(l4) * l2.cross(l4).cross(l2).normalized())
+            dCp4 = -1 / sq * (aux4 * n1)
+            # get ∆Cp2 = - 1 / sqrt(1 - d^2) * ((∂n1 / ∂p2)^T * n2) + ((∂n2 / ∂p2)^T * n1
+            # aux21 = (∂n1 / ∂p2)^T = -1 / |p2 x p3| * [ -p3 + (p2 x p3) * ((p2 x p3) x p3)^T]
+            # aux22 = (∂n2 / ∂p2)^T = -1 / |p2 x p4| * [ -p4 + (p2 x p4) * ((p2 x p4) x p4)^T]
+            aux21 = -1 / l2.cross(l3).length * (-l3 + l2.cross(l3) * l2.cross(l3).cross(l3).normalized())
+            aux22 = -1 / l2.cross(l4).length * (-l4 + l2.cross(l4) * l2.cross(l4).cross(l4).normalized())
+            dCp2 = -1 / sq * (aux21 * n2) + (aux22 * n1)
+            # get ∆Cp1 = - dCp2 - dCp3 - dCp4
+            dCp1 = -dCp2 - dCp3 - dCp4
+
+            # get ∆C = ∆C^2 = ∆Cp1^2 + ∆Cp2^2 + ∆Cp3^2 + ∆Cp4^2 
+            dC = dCp1.dot(dCp1) + dCp2.dot(dCp2) + dCp3.dot(dCp3) + dCp4.dot(dCp4)
+
+            # Get lambda variations: eq 17: ∆λ = (−C - k' * λ)/(dC^2 * W + k')
+            # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
+            deltalambda1 = (-C - self.k_coef * self.lambda_val) / (dC * W1 + self.k_coef)
+            # ∆λ2 = (−C2 - k' * λ2)/(dC^2 * W2 + k')
+            deltalambda2 = (-C - self.k_coef * self.lambda_val) / (dC * W2 + self.k_coef)
+            # ∆λ3 = (−C3 - k' * λ3)/(dC^2 * W3 + k')
+            deltalambda3 = (-C - self.k_coef * self.lambda_val) / (dC * W3 + self.k_coef)
+            # ∆λ4 = (−C4 - k' * λ4)/(dC^2 * W4 + k')
+            deltalambda4 = (-C - self.k_coef * self.lambda_val) / (dC * W4 + self.k_coef)
+
+            # Get position variations: eq 18: ∆x = W * dC * ∆λ
+            # ∆x1 = W1 * dC1 * ∆λ1
+            deltap1 = W1 * dCp1 * deltalambda1
+            # ∆x2 = W2 * dC2 * ∆λ2
+            deltap2 = W2 * dCp2 * deltalambda2
+            # ∆x3 = W3 * dC3 * ∆λ3
+            deltap3 = W3 * dCp3 * deltalambda3
+            # ∆x4 = W4 * dC4 * ∆λ4
+            deltap4 = W4 * dCp4 * deltalambda4
+
+            # Update lambdas and positions
+            self.lambda_val += deltalambda1
+            self.lambda_val += deltalambda2
+            self.lambda_val += deltalambda3
+            self.lambda_val += deltalambda4
+            p1.location += deltap1
+            p2.location += deltap2
+            p3.location += deltap3
+            p4.location += deltap4
+
+                            
+    def change_stiff(self, stiff, niters):
+        self.stiffness = stiff
+        self.compute_k_coef(niters)
+        
+    def change_phi(self, phi):
+        self.phi = math.radians(phi)
 
 class TriangleBendingConstraint(Constraint):
     """
