@@ -1,3 +1,3 @@
 # PBD_Blender
 Blender add-on implementing XPBD 
-![suzanne_collide](https://github.com/user-attachments/assets/1fc0bf24-a989-49b6-a64b-3e3a4cdf8981)
+![XPBDBlenderDemo](https://github.com/user-attachments/assets/b9acdb4e-cb85-44d1-a218-d65592c36473)
