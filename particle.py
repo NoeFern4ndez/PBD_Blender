@@ -4,12 +4,8 @@
 Created on Jul 2024
 
 @author: Noé Fernández González
-@author: Ignacio García-Fernández
 
 Copyright 2023 Noé Fernández González <nofergon@alumni.uv.es>
-Copyright 2023 Ignacio García Fernández <ignacio.garcia@uv.es>
-Copyright 2023 IBV - Instituto de Biomecánica de Valencia
-
 """
 
 import bpy

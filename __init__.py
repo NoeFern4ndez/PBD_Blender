@@ -42,7 +42,11 @@ else:
     
 """ CONSTRAINT ARRAY"""  
 d_constraints = [] # distance constraints
+sh_d_constraints = [] # shear distance constraints
+bs_d_constraints = [] # bending spring distance constraints
 b_constraints = [] # bending constraints
+vb_constraints = [] # vertical bending constraints
+hb_constraints = [] # horizontal bending constraints
 tb_constraints = [] # triangle bending constraints  
 ec_constraints = [] # environmental collisions constraint
 setted_up_objects = []
@@ -145,7 +149,20 @@ class xpbdIKConstraintsPanel(bpy.types.Panel):
             row = layout.row()
             row.label(text = "Distance constraints")
             row = layout.row()
-            row.prop(context.object, "dstiff", slider = True)  
+            row.prop(context.object, "structural")
+            if context.object.structural:
+                row = layout.row()
+                row.prop(context.object, "dstiff", slider = True)  
+            row = layout.row()
+            row.prop(context.object, "shear")
+            if context.object.shear:
+                row = layout.row()
+                row.prop(context.object, "shdstiff", slider = True)
+            row = layout.row()
+            row.prop(context.object, "bending_spring")
+            if context.object.bending_spring:
+                row = layout.row()
+                row.prop(context.object, "bsdstiff", slider = True)
 
         if context.object.bending:
             row = layout.row()
@@ -153,7 +170,15 @@ class xpbdIKConstraintsPanel(bpy.types.Panel):
             row = layout.row()
             row.prop(context.object, "bstiff", slider = True)
             row = layout.row()
-            row.prop(context.object, "bend_phi", slider = True)  
+            row.prop(context.object, "bend_phi", slider = True)
+            row = layout.row()
+            row.prop(context.object, "vbstiff", slider = True)
+            row = layout.row()
+            row.prop(context.object, "vbend_phi", slider = True)  
+            row = layout.row()
+            row.prop(context.object, "hbstiff", slider = True)
+            row = layout.row()
+            row.prop(context.object, "hbend_phi", slider = True)
             
         if context.object.triangle_bending:
             row = layout.row()
@@ -246,7 +271,11 @@ class Move_particle_to_vertex(bpy.types.Operator):
 def setup_xpbd(context, obj):
     
     d_constraints.clear()
+    sh_d_constraints.clear()
+    bs_d_constraints.clear()
     b_constraints.clear()
+    vb_constraints.clear()
+    hb_constraints.clear()
     tb_constraints.clear()
     ec_constraints.clear() 
     particles.clear()
@@ -278,16 +307,53 @@ def setup_xpbd(context, obj):
             Distance constraints creation
         """
         if obj.distance_constraint:
-            for e in edges:
-                if mesh.vertices[e[0]] in vertices and mesh.vertices[e[1]] in vertices:
-                    i1 = vertices.index(mesh.vertices[e[0]])
-                    p1 = particles[i1]
-                    i2 = vertices.index(mesh.vertices[e[1]])
-                    p2 = particles[i2]
-                    length = (p2.location - p1.location).length
-                    c = cns.DistanceConstraint(p1, p2, length, obj.dstiff)
+            # Structural 
+            if obj.structural:
+                for e in edges:
+                    if mesh.vertices[e[0]] in vertices and mesh.vertices[e[1]] in vertices:
+                        i1 = vertices.index(mesh.vertices[e[0]])
+                        p1 = particles[i1]
+                        i2 = vertices.index(mesh.vertices[e[1]])
+                        p2 = particles[i2]
+                        length = (p2.location - p1.location).length
+                        c = cns.DistanceConstraint(p1, p2, length, obj.dstiff)
+                        c.compute_k_coef(context.scene.niters)
+                        d_constraints.append(c)
+            # Shear
+            if obj.shear:
+                for face in mesh.polygons:
+                    if len(face.vertices) == 4:
+                        v1 = mesh.vertices[face.vertices[0]]
+                        v2 = mesh.vertices[face.vertices[1]]
+                        v3 = mesh.vertices[face.vertices[2]]
+                        v4 = mesh.vertices[face.vertices[3]]
+
+                        i1 = vertices.index(v1)
+                        p1 = particles[i1]
+                        i2 = vertices.index(v2)
+                        p2 = particles[i2]
+                        i3 = vertices.index(v3)
+                        p3 = particles[i3]
+                        i4 = vertices.index(v4)
+                        p4 = particles[i4]
+
+                        c1 = cns.DistanceConstraint(p1, p3, (p3.location - p1.location).length, obj.shdstiff)
+                        c1.compute_k_coef(context.scene.niters)
+                        sh_d_constraints.append(c1)
+                        c2 = cns.DistanceConstraint(p2, p4, (p4.location - p2.location).length, obj.shdstiff)
+                        c2.compute_k_coef(context.scene.niters)
+                        sh_d_constraints.append(c2)
+
+            # Bending spring (each vertex is connected to the next next one)
+            if obj.bending_spring:
+                for i in range(len(vertices)):
+                    p1 = particles[i]
+                    p2 = particles[(i+1) % len(vertices)]
+                    c = cns.DistanceConstraint(p1, p2, (p2.location - p1.location).length, obj.bsdstiff)
                     c.compute_k_coef(context.scene.niters)
-                    d_constraints.append(c)
+                    bs_d_constraints.append(c)
+
+            
 
         """
             Bending constraints creation
@@ -309,10 +375,20 @@ def setup_xpbd(context, obj):
                     i4 = vertices.index(v4)
                     p4 = particles[i4]
                     
-                    # Create constraints for each face
+                    # Create constraints for each face (diagonal bending)
                     c1 = cns.BendingConstraint(p1, p2, p3, p4, obj.bstiff, obj.bend_phi)
                     c1.compute_k_coef(context.scene.niters)
                     b_constraints.append(c1)
+
+                    # Create constraints for each face (vertical bending)
+                    c2 = cns.BendingConstraint(p1, p3, p2, p4, obj.vbstiff, obj.vbend_phi)
+                    c2.compute_k_coef(context.scene.niters)
+                    vb_constraints.append(c2)
+
+                    # Create constraints for each face (horizontal bending)
+                    c3 = cns.BendingConstraint(p1, p2, p4, p3, obj.hbstiff, obj.hbend_phi)
+                    c3.compute_k_coef(context.scene.niters)
+                    hb_constraints.append(c3)
                     
         """
             Triangle bending constraints creation
@@ -377,6 +453,12 @@ def update_xpbd(context : bpy.types.Context):
     for c in d_constraints:
         c.lambda_val = 0
 
+    for c in sh_d_constraints:
+        c.lambda_val = 0
+
+    for c in bs_d_constraints:
+        c.lambda_val = 0
+
     for c in b_constraints:
         c.lambda_val = 0
 
@@ -394,11 +476,24 @@ def update_xpbd(context : bpy.types.Context):
 
     for i in range(scene.niters):
         if obj.distance_constraint:
-            for c in d_constraints:
-                if c.stiffness != obj.dstiff:
-                    c.change_stiff(obj.dstiff, scene.niters)
-                c.proyecta_restriccion()
-        
+            if obj.structural:
+                for c in d_constraints:
+                    if c.stiffness != obj.dstiff:
+                        c.change_stiff(obj.dstiff, scene.niters)
+                    c.proyecta_restriccion()
+
+            if obj.shear:
+                for c in sh_d_constraints:
+                    if c.stiffness != obj.shdstiff:
+                        c.change_stiff(obj.shdstiff, scene.niters)
+                    c.proyecta_restriccion()
+
+            if obj.bending_spring:
+                for c in bs_d_constraints:
+                    if c.stiffness != obj.bsdstiff:
+                        c.change_stiff(obj.bsdstiff, scene.niters)
+                    c.proyecta_restriccion()
+
         if obj.bending:
             for c in b_constraints:
                 if c.stiffness != obj.bstiff:
@@ -406,6 +501,20 @@ def update_xpbd(context : bpy.types.Context):
                 if c.phi != obj.bend_phi:
                     c.change_phi(obj.bend_phi)
                 c.proyecta_restriccion()
+
+            # for c in vb_constraints:
+            #     if c.stiffness != obj.vbstiff:
+            #         c.change_stiff(obj.vbstiff, scene.niters)
+            #     if c.phi != obj.vbend_phi:
+            #         c.change_phi(obj.vbend_phi)
+            #     c.proyecta_restriccion()
+
+            # for c in hb_constraints:
+            #     if c.stiffness != obj.hbstiff:
+            #         c.change_stiff(obj.hbstiff, scene.niters)
+            #     if c.phi != obj.hbend_phi:
+            #         c.change_phi(obj.hbend_phi)
+            #     c.proyecta_restriccion()
 
         if obj.triangle_bending:
             for c in tb_constraints:
@@ -482,9 +591,9 @@ def set_environment_collisions_bbox(context, obj):
                     if point_inside_bbox(ob, obj.matrix_world @ p.location):
                             for face in ob.data.polygons:
                                 if ((obj.matrix_world @ p.location) - (ob.matrix_world @ ob.data.vertices[face.vertices[0]].co)).dot(face.normal) < 0.5:
-                                            c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff)
-                                            c.compute_k_coef(scene.niters)
-                                            ec_constraints.append(c)
+                                        c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff)
+                                        c.compute_k_coef(scene.niters)
+                                        ec_constraints.append(c)
                                 
 # Función para comprobar si un punto está dentro de la bounding box de un objeto
 def point_inside_bbox(obj, point):
@@ -584,10 +693,33 @@ def register():
     
     bpy.types.Object.dstiff = bpy.props.FloatProperty(name = "Distance constraint stiff", 
                                                             description = "Stiffness between 0 and 1 of distance constraint", 
-                                                            min = 0.00000001, 
+                                                            min = 0.0001, 
                                                             max = 1,
                                                             default = 0.5)
     
+    bpy.types.Object.shdstiff = bpy.props.FloatProperty(name = "Shear distance constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of shear distance constraint", 
+                                                            min = 0.0001, 
+                                                            max = 1,
+                                                            default = 0.5)
+    
+    bpy.types.Object.bsdstiff = bpy.props.FloatProperty(name = "Bending spring distance constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of bending spring distance constraint",
+                                                            min = 0.0001,
+                                                            max = 1,
+                                                            default = 0.5)
+    
+    bpy.types.Object.structural = bpy.props.BoolProperty(name = "Structural distance constraint",
+                                                            description = "Determines if the structural distance constraints are applied", 
+                                                            default = True)
+    
+    bpy.types.Object.shear = bpy.props.BoolProperty(name = "Shear distance constraint",
+                                                            description = "Determines if the shear distance constraints are applied", 
+                                                            default = True)
+    
+    bpy.types.Object.bending_spring = bpy.props.BoolProperty(name = "Bending spring distance constraint",
+                                                            description = "Determines if the bending spring distance constraints are applied", 
+                                                            default = True)
     """
         Bending constraint properties
     """
@@ -596,17 +728,42 @@ def register():
                                                             description = "Determines if the bending constraints are applied", 
                                                             default = True)
     
-    bpy.types.Object.bstiff = bpy.props.FloatProperty(name = "Bending constraint stiff",
+    bpy.types.Object.bstiff = bpy.props.FloatProperty(name = "Diagonal Bending constraint stiff",
                                                             description = "Stiffness between 0 and 1 of bending constraint", 
-                                                            min = 0.00000001, 
+                                                            min = 0.0001, 
                                                             max = 1,
                                                             default = 0.5)
     
     bpy.types.Object.bend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
                                                         description = "Angle phi for bending constraint",
-                                                        min = -360.0,
+                                                        min = 0.0,
                                                         max = 360.0,
                                                         default = 0.0)
+    
+    bpy.types.Object.vbstiff = bpy.props.FloatProperty(name = "Vertical Bending constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of bending constraint", 
+                                                            min = 0.0001, 
+                                                            max = 1,
+                                                            default = 0.5)
+    
+    bpy.types.Object.vbend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
+                                                        description = "Angle phi for bending constraint",
+                                                        min = 0.0,
+                                                        max = 360.0,
+                                                        default = 0.0)
+    
+    bpy.types.Object.hbstiff = bpy.props.FloatProperty(name = "Horizontal Bending constraint stiff",
+                                                            description = "Stiffness between 0 and 1 of bending constraint", 
+                                                            min = 0.0001, 
+                                                            max = 1,
+                                                            default = 0.5)
+    
+    bpy.types.Object.hbend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
+                                                        description = "Angle phi for bending constraint",
+                                                        min = 0.0,
+                                                        max = 360.0,
+                                                        default = 0.0)
+                                                       
     
     """
         Triangle bending constraint properties
@@ -618,7 +775,7 @@ def register():
     
     bpy.types.Object.tbstiff = bpy.props.FloatProperty(name = "Triangle bending constraint stiff",
                                                             description = "Stiffness between 0 and 1 of triangle bending constraint", 
-                                                            min = 0.00000001, 
+                                                            min = 0.0001, 
                                                             max = 1,
                                                             default = 0.5)
     
@@ -637,7 +794,7 @@ def register():
 
     bpy.types.Object.ecstiff = bpy.props.FloatProperty(name = "Environment collisions constraint stiff",
                                                             description = "Stiffness between 0 and 1 of environment collisions constraint", 
-                                                            min = 0.00000001, 
+                                                            min = 0.0001, 
                                                             max = 1,
                                                             default = 0.5)
     
