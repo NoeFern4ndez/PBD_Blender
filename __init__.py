@@ -13,6 +13,7 @@ from mathutils import Vector, Quaternion
 import math
 import numpy as np
 import random
+
     
 bl_info = {
     "name": "PBD",
@@ -171,14 +172,6 @@ class xpbdIKConstraintsPanel(bpy.types.Panel):
             row.prop(context.object, "bstiff", slider = True)
             row = layout.row()
             row.prop(context.object, "bend_phi", slider = True)
-            row = layout.row()
-            row.prop(context.object, "vbstiff", slider = True)
-            row = layout.row()
-            row.prop(context.object, "vbend_phi", slider = True)  
-            row = layout.row()
-            row.prop(context.object, "hbstiff", slider = True)
-            row = layout.row()
-            row.prop(context.object, "hbend_phi", slider = True)
             
         if context.object.triangle_bending:
             row = layout.row()
@@ -274,8 +267,6 @@ def setup_xpbd(context, obj):
     sh_d_constraints.clear()
     bs_d_constraints.clear()
     b_constraints.clear()
-    vb_constraints.clear()
-    hb_constraints.clear()
     tb_constraints.clear()
     ec_constraints.clear() 
     particles.clear()
@@ -375,20 +366,11 @@ def setup_xpbd(context, obj):
                     i4 = vertices.index(v4)
                     p4 = particles[i4]
                     
-                    # Create constraints for each face (diagonal bending)
+                    # Create constraints for each face 
                     c1 = cns.BendingConstraint(p1, p2, p3, p4, obj.bstiff, obj.bend_phi)
                     c1.compute_k_coef(context.scene.niters)
                     b_constraints.append(c1)
 
-                    # Create constraints for each face (vertical bending)
-                    c2 = cns.BendingConstraint(p1, p3, p2, p4, obj.vbstiff, obj.vbend_phi)
-                    c2.compute_k_coef(context.scene.niters)
-                    vb_constraints.append(c2)
-
-                    # Create constraints for each face (horizontal bending)
-                    c3 = cns.BendingConstraint(p1, p2, p4, p3, obj.hbstiff, obj.hbend_phi)
-                    c3.compute_k_coef(context.scene.niters)
-                    hb_constraints.append(c3)
                     
         """
             Triangle bending constraints creation
@@ -501,20 +483,6 @@ def update_xpbd(context : bpy.types.Context):
                 if c.phi != obj.bend_phi:
                     c.change_phi(obj.bend_phi)
                 c.proyecta_restriccion()
-
-            # for c in vb_constraints:
-            #     if c.stiffness != obj.vbstiff:
-            #         c.change_stiff(obj.vbstiff, scene.niters)
-            #     if c.phi != obj.vbend_phi:
-            #         c.change_phi(obj.vbend_phi)
-            #     c.proyecta_restriccion()
-
-            # for c in hb_constraints:
-            #     if c.stiffness != obj.hbstiff:
-            #         c.change_stiff(obj.hbstiff, scene.niters)
-            #     if c.phi != obj.hbend_phi:
-            #         c.change_phi(obj.hbend_phi)
-            #     c.proyecta_restriccion()
 
         if obj.triangle_bending:
             for c in tb_constraints:
@@ -737,34 +705,9 @@ def register():
     bpy.types.Object.bend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
                                                         description = "Angle phi for bending constraint",
                                                         min = 0.0,
-                                                        max = 360.0,
-                                                        default = 0.0)
-    
-    bpy.types.Object.vbstiff = bpy.props.FloatProperty(name = "Vertical Bending constraint stiff",
-                                                            description = "Stiffness between 0 and 1 of bending constraint", 
-                                                            min = 0.0001, 
-                                                            max = 1,
-                                                            default = 0.5)
-    
-    bpy.types.Object.vbend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
-                                                        description = "Angle phi for bending constraint",
-                                                        min = 0.0,
-                                                        max = 360.0,
-                                                        default = 0.0)
-    
-    bpy.types.Object.hbstiff = bpy.props.FloatProperty(name = "Horizontal Bending constraint stiff",
-                                                            description = "Stiffness between 0 and 1 of bending constraint", 
-                                                            min = 0.0001, 
-                                                            max = 1,
-                                                            default = 0.5)
-    
-    bpy.types.Object.hbend_phi = bpy.props.FloatProperty(name = "Bending angle phi",
-                                                        description = "Angle phi for bending constraint",
-                                                        min = 0.0,
-                                                        max = 360.0,
+                                                        max = 180.0,
                                                         default = 0.0)
                                                        
-    
     """
         Triangle bending constraint properties
     """

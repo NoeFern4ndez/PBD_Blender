@@ -43,7 +43,6 @@ class Particle:
         self.mass = 1.0
         self.w = 1.0 / self.mass
         self.bloqueada = False
-        self.display_size = 0.1
         self.Vdamp = damping
 
     def set_bloqueada(self, bl):
