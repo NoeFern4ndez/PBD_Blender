@@ -238,7 +238,7 @@ class Bloq_vertex(bpy.types.Operator):
                 i = 0
                 for vertex in obj.data.vertices:
                     if vertex.select:
-                        xpbd_object.particles[i].set_bloqueada(not particles[i].bloqueada)
+                        xpbd_object.particles[i].set_bloqueada(not xpbd_object.particles[i].bloqueada)
                     i += 1
                     
             bpy.ops.object.mode_set(mode = "OBJECT")
@@ -360,11 +360,11 @@ def update_xpbd(context : bpy.types.Context):
 
         # Aplicar las posiciones a la mesh 
         xpbd.apply_positions_to_mesh()
-   
+
+    ec_constraints.clear()
 
 def set_environment_collisions_sphere(context, obj, xpbd):
     scene = context.scene
-    ec_constraints.clear()
     particles = xpbd.particles
 
     # Check every object in the scene
@@ -381,14 +381,13 @@ def set_environment_collisions_sphere(context, obj, xpbd):
                     if dist < 0.01:
                         # add a collision constraint where the normal is the vector from the center of the sphere to the particle
                         n = (obj.matrix_world @ particles[0].location - ob.location).normalized()
-                        c = cns.EnvironmentCollisionConstraint(p, n, 1, obj.ecstiff)
+                        c = cns.EnvironmentCollisionConstraint(p, n, 0, obj.ecstiff)
                         c.compute_k_coef(scene.niters)
                         ec_constraints.append(c)
 
 
 def set_environment_collisions_bbox(context, obj, xpbd):
     scene = context.scene
-    ec_constraints.clear()
     particles = xpbd.particles
     
     # TODO: change this to only create collisions on desired objects
@@ -400,7 +399,7 @@ def set_environment_collisions_bbox(context, obj, xpbd):
                             for face in ob.data.polygons:
                                 dist = (obj.matrix_world @ p.location - (ob.matrix_world @ ob.data.vertices[face.vertices[0]].co)).dot(face.normal)
                                 if dist < 0.01:
-                                        c = cns.EnvironmentCollisionConstraint(p, face.normal, 1, obj.ecstiff)
+                                        c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff)
                                         c.compute_k_coef(scene.niters)
                                         ec_constraints.append(c)
                                 

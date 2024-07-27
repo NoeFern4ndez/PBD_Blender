@@ -213,7 +213,7 @@ class xpbd_object:
 
     def update_xpbd(self, context : bpy.types.Context):
         scene = context.scene
-        obj = context.object
+        obj = self.obj
         
         for p in self.particles:
             p.force = Vector((obj.force[0],obj.force[1],obj.force[2]))
