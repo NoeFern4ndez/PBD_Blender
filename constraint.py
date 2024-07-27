@@ -11,7 +11,7 @@ Copyright 2023 Noé Fernández González <nofergon@alumni.uv.es>
 import bpy
 import math
 
-if __name__ == "ergoik":
+if __name__ == "xpbd":
     from importlib import reload
     import particle as prt
     # Needed in version 0.7 to prevent resident modules
