@@ -13,6 +13,8 @@ from mathutils import Vector, Quaternion
 import math
 import numpy as np
 import random
+from concurrent.futures import ThreadPoolExecutor
+
 
     
 bl_info = {
@@ -424,15 +426,7 @@ def point_inside_bbox(obj, point):
     
     # Comprueba si el punto está dentro de la bounding box
     return (min_x <= point.x <= max_x) and (min_y <= point.y <= max_y) and (min_z <= point.z <= max_z)         
-        
-def move_target(a,b):
-    """
-        Callback function called each time an object is moved.
-        Checks if target object exists, if true, updates its last position property
     
-    """
-    context = bpy.context
-    obj = context.object
             
 def target_moved():
     """
@@ -441,10 +435,8 @@ def target_moved():
     
     """
     context = bpy.context
-    obj = context.object
     if context.mode == 'OBJECT':
-        if obj.setted_up:
-            update_xpbd(context) 
+        update_xpbd(context) 
 
     return bpy.context.scene.ik_timer
         
@@ -620,8 +612,6 @@ def register():
         bpy.utils.register_class(cl)
         
     # Callback functions
-    bpy.app.handlers.depsgraph_update_post.append(move_target)
-
     bpy.app.timers.register(target_moved)
 
         
@@ -640,13 +630,30 @@ def unregister():
         bpy.utils.unregister_class(cl)
 
     del bpy.types.Scene.niters
-    del bpy.types.Object.last_pos
-    del bpy.types.Object.xforce
-    del bpy.types.Object.yforce
-    del bpy.types.Object.zforce
     del bpy.types.Scene.ik_timer
-    del bpy.types.Object.stiff
-    del bpy.app.handlers.depsgraph_update_post
+    del bpy.types.Scene.dt
+    del bpy.types.Object.vdamp
+    del bpy.types.Object.distance_constraint
+    del bpy.types.Object.dstiff
+    del bpy.types.Object.shdstiff
+    del bpy.types.Object.bsdstiff
+    del bpy.types.Object.structural
+    del bpy.types.Object.shear
+    del bpy.types.Object.bending_spring
+    del bpy.types.Object.bending
+    del bpy.types.Object.bstiff
+    del bpy.types.Object.bend_phi
+    del bpy.types.Object.triangle_bending
+    del bpy.types.Object.tbstiff
+    del bpy.types.Object.kbend
+    del bpy.types.Object.environmental_collisions
+    del bpy.types.Object.ecstiff
+    del bpy.types.Object.ec_type
+    del bpy.types.Object.force
+    del bpy.types.Object.setted_up
+    del bpy.types.Object.breakable
+    del bpy.types.Object.break_threshold
+
     bpy.app.timers.unregister(target_moved)
     
 if __name__ == "__main__":
