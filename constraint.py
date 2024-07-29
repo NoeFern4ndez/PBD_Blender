@@ -273,8 +273,7 @@ class TriangleBendingConstraint(Constraint):
         wb0 = b0.w
         wb1 = b1.w
         wv = v.w
-        W = wb0 + wb1 + 2 * wv
-        
+        W = wb0 + wb1 + 2* wv
         # get centroid of the triangle c = (b0 + b1 + v) / 3
         c = (b0.location + b1.location + v.location) / 3
         
@@ -283,14 +282,11 @@ class TriangleBendingConstraint(Constraint):
         h0 = self.h0
         bendk = self.bendk
         
-        # check if both inverse masses are different from 0
-        if W > 0.0005 and h1 != 0:
-            W1 = wb0 / W
-            W2 = wb1 / W
-            W3 = wv / W
-
-            # get C = h1 - (bendk + h0) 
-            C = h1 - (bendk + h0)
+        # get C = h1 - (bendk + h0) 
+        C = h1 - (bendk + h0)
+        
+        # check if constraint is satisfied
+        if C > 0.0001 or C < -0.0001:    
             
             # get ∆Cb0 = 2wb0 / W * (v - c) * (1 - (bendk + h0) / h1)
             dCb0 = 2 * wb0 / W * (v.location - c) * (1 - (bendk + h0) / h1)
@@ -299,35 +295,43 @@ class TriangleBendingConstraint(Constraint):
             # get ∆Cv = -4wv / W * (v - c) * (1 - (bendk + h0) / h1)
             dCv = -4 * wv / W * (v.location - c) * (1 - (bendk + h0) / h1)
             
-            # get ∆C = ∆C^2 = ∆Cb0^2 + ∆Cb1^2 + ∆Cv^2
-            dC = dCb0.dot(dCb0) + dCb1.dot(dCb1) + dCv.dot(dCv)
+            # get ∆Cb0 = (b0 + b1 - 2v) / (3 * |2v - b0 - b1|)
+            # denomdC = 3 * (2 * v.location - b0.location - b1.location).length
+            # if denomdC != 0:
+            #     dCb0 = (b0.location + b1.location - 2 * v.location) / denomdC
+            #     # get ∆Cb1 = (b0 + b1 - 2v) / (3 * |2v - b0 - b1|)
+            #     dCb1 = dCb0
+            #     # get ∆Cv = 3 * (b0 - b1 + 2v) / (3 * |2v - b0 - b1|)
+            #     dCv = 3 * (b0.location - b1.location + 2 * v.location) / denomdC    
+                
+            #     # Get lambda variations: eq 17: ∆λ = (−C - k' * λ)/(dC^2 * W + k')
+            #     lambdaDenom = dCb0.dot(dCb0) * wb0 + dCb1.dot(dCb1) * wb1 + dCv.dot(dCv) * wv * 2 + self.k_coef
+            #     if lambdaDenom != 0:
+            #         # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
+            #         deltalambdab0 = (-C - self.k_coef * self.lambda_val) / lambdaDenom
+            #         # ∆λ2 = (−C2 - k' * λ2)/(dC^2 * W2 + k')
+            #         deltalambdab1 = (-C - self.k_coef * self.lambda_val) / lambdaDenom
+            #         # ∆λ3 = (−C3 - k' * λ3)/(dC^2 * W3 + k')
+            #         deltalambdav = (-C - self.k_coef * self.lambda_val) / lambdaDenom
 
-            # Get lambda variations: eq 17: ∆λ = (−C - k' * λ)/(dC^2 * W + k')
-            # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
-            deltalambdab0 = (-C - self.k_coef * self.lambda_val) / (dC * W1 + self.k_coef)
-            # ∆λ2 = (−C2 - k' * λ2)/(dC^2 * W2 + k')
-            deltalambdab1 = (-C - self.k_coef * self.lambda_val) / (dC * W2 + self.k_coef)
-            # ∆λ3 = (−C3 - k' * λ3)/(dC^2 * W3 + k')
-            deltalambdav = (-C - self.k_coef * self.lambda_val) / (dC * W3 + self.k_coef)
+            #     # Get position variations: eq 18: ∆x = W * dC * ∆λ
+            #     # ∆x1 = W1 * dC1 * ∆λ1
+            #     deltab0 = wb0 * dCb0 * deltalambdab0
+            #     # ∆x2 = W2 * dC2 * ∆λ2
+            #     deltab1 = wb1 * dCb1 * deltalambdab1
+            #     # ∆x3 = W3 * dC3 * ∆λ3
+            #     deltav = wv * dCv * deltalambdav
 
-            # Get position variations: eq 18: ∆x = W * dC * ∆λ
-            # ∆x1 = W1 * dC1 * ∆λ1
-            deltab0 = W1 * dCb0 * deltalambdab0
-            # ∆x2 = W2 * dC2 * ∆λ2
-            deltab1 = W2 * dCb1 * deltalambdab1
-            # ∆x3 = W3 * dC3 * ∆λ3
-            deltav = W3 * dCv * deltalambdav
-
-            # Update lambdas and positions
-            # self.lambda_val += deltalambdab0
-            # self.lambda_val += deltalambdab1
-            # self.lambda_val += deltalambdav
-            # b0.location += deltab0
-            # b1.location += deltab1
-            # v.location += deltav
-            b0.location += dCb0
-            b1.location += dCb1
-            v.location += dCv
+            #     # Update lambdas and positions
+            #     self.lambda_val += deltalambdab0
+            #     self.lambda_val += deltalambdab1
+            #     self.lambda_val += deltalambdav
+            #     b0.location += deltab0
+            #     b1.location += deltab1
+            #     v.location += deltav
+            b0.location += dCb0 * self.k_coef
+            b1.location += dCb1 * self.k_coef
+            v.location += dCv * self.k_coef
                             
     def change_stiff(self, stiff, niters):
         self.stiffness = stiff
@@ -346,7 +350,7 @@ class EnvironmentCollisionConstraint(Constraint):
     bl_label = "environmtent collision constraint"
     bl_options = {'UNDO'}
     
-    def __init__(self, p1, n, dist, k):
+    def __init__(self, p1, n, dist, k, damp):
         """
             Init function
         
@@ -358,6 +362,7 @@ class EnvironmentCollisionConstraint(Constraint):
         self.k_coef = self.stiffness
         self.lambda_val = 0.0
         self.n = n
+        self.damp = damp
 
     def proyecta_restriccion(self):
         """
@@ -383,12 +388,12 @@ class EnvironmentCollisionConstraint(Constraint):
 
             # Get lambda variation
             # ∆λ1 = (−C1 - k' * λ1)/(dC^2 * W1 + k')
-            lambdaDenom = dC1.dot(dC1) * w1 + self.k_coef + 1000
+            lambdaDenom = dC1.dot(dC1) * w1 + self.k_coef + self.damp
             if lambdaDenom != 0:
                 deltalambda = (-C - self.k_coef * self.lambda_val) / lambdaDenom
 
                 # Get position variation
-                # ∆x1 = W1 * dC1 * ∆λ1
+                # ∆x1 = w1 * dC1 * ∆λ1
                 deltap1 = w1 * dC1 * deltalambda
             
                 # Update lambda and position

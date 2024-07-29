@@ -363,11 +363,12 @@ def update_xpbd(context : bpy.types.Context):
         # Aplicar las posiciones a la mesh 
         xpbd.apply_positions_to_mesh()
 
-    ec_constraints.clear()
+    # ec_constraints.clear()
 
 def set_environment_collisions_sphere(context, obj, xpbd):
     scene = context.scene
     particles = xpbd.particles
+    ec_constraints.clear()
 
     # Check every object in the scene
     for ob in bpy.data.objects:
@@ -383,7 +384,7 @@ def set_environment_collisions_sphere(context, obj, xpbd):
                     if dist < 0.01:
                         # add a collision constraint where the normal is the vector from the center of the sphere to the particle
                         n = (obj.matrix_world @ particles[0].location - ob.location).normalized()
-                        c = cns.EnvironmentCollisionConstraint(p, n, 0, obj.ecstiff)
+                        c = cns.EnvironmentCollisionConstraint(p, n, 0, obj.ecstiff, 0.001)
                         c.compute_k_coef(scene.niters)
                         ec_constraints.append(c)
 
@@ -391,6 +392,7 @@ def set_environment_collisions_sphere(context, obj, xpbd):
 def set_environment_collisions_bbox(context, obj, xpbd):
     scene = context.scene
     particles = xpbd.particles
+    ec_constraints.clear()
     
     # TODO: change this to only create collisions on desired objects
     for ob in bpy.data.objects:
@@ -401,7 +403,7 @@ def set_environment_collisions_bbox(context, obj, xpbd):
                             for face in ob.data.polygons:
                                 dist = (obj.matrix_world @ p.location - (ob.matrix_world @ ob.data.vertices[face.vertices[0]].co)).dot(face.normal)
                                 if dist < 0.01:
-                                        c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff)
+                                        c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff, 1000)
                                         c.compute_k_coef(scene.niters)
                                         ec_constraints.append(c)
                                 
@@ -431,7 +433,7 @@ def point_inside_bbox(obj, point):
 def target_moved():
     """
         Callback function called each time every time interval.
-        Checks if target object exists, if true, executes the simulation loop
+        Executes the simulation loop
     
     """
     context = bpy.context
