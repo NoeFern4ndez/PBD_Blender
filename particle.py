@@ -44,6 +44,7 @@ class Particle:
         self.w = 1.0 / self.mass
         self.bloqueada = False
         self.Vdamp = damping
+        self.collide_damp = mathutils.Vector((1.0, 1.0, 1.0))
 
     def set_bloqueada(self, bl):
         if bl:
@@ -60,7 +61,7 @@ class Particle:
 
     def update_pbd_vel(self, dt):
         self.velocity = (self.location.copy() - self.last_location.copy()) / dt
-        self.velocity *= self.Vdamp
+        self.velocity *= self.Vdamp * self.collide_damp.copy()
 
     def update(self, dt):
         # Actualizar la aceleración de la partícula con la fuerza actual    
@@ -81,7 +82,4 @@ class Particle:
         # Limpieza de fuerzas y aceleraciones
         self.acceleration = mathutils.Vector((0.0, 0.0, 0.0))
         self.force = mathutils.Vector((0.0, 0.0, 0.0))
-
-    def set_static_location(self,location):
-        self.last_static_location = location
         

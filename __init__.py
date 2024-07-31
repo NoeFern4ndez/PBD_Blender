@@ -97,11 +97,12 @@ class xpbdIKMainPanel(bpy.types.Panel):
         row = layout.row()
         row.operator("object.setup")
         row = layout.row()
-        row.label(text = "Breakable objects")
-        row.prop(context.object, "breakable") 
-        if context.object.breakable:
-            row = layout.row()
-            row.prop(context.object, "break_threshold") 
+        row.prop(context.scene, "pause")
+        # row.label(text = "Breakable objects")
+        # row.prop(context.object, "breakable") 
+        # if context.object.breakable:
+        #     row = layout.row()
+        #     row.prop(context.object, "break_threshold") 
         
         if context.object.setted_up and context.object.mode == "EDIT": 
             row = layout.row()
@@ -399,13 +400,20 @@ def set_environment_collisions_bbox(context, obj, xpbd):
         if obj.name != ob.name and ob.type == 'MESH'and "not_collide" not in ob.name:
             if ((obj.matrix_world @ particles[0].location) - ob.location).length < 40:
                 for p in particles:
+                    #p.collide_damp = Vector((1.0, 1.0, 1.0))
                     if point_inside_bbox(ob, obj.matrix_world @ p.location):
                             for face in ob.data.polygons:
                                 dist = (obj.matrix_world @ p.location - (ob.matrix_world @ ob.data.vertices[face.vertices[0]].co)).dot(face.normal)
                                 if dist < 0.01:
-                                        c = cns.EnvironmentCollisionConstraint(p, face.normal, 0, obj.ecstiff, 1000)
-                                        c.compute_k_coef(scene.niters)
-                                        ec_constraints.append(c)
+                                    # c = cns.EnvironmentCollisionConstraint(p, face.normal, obj.ecstiff, 1000)
+                                    # c.compute_k_coef(scene.niters)
+                                    # ec_constraints.append(c)
+                                    # Damp the velocity perpendicular to the normal of the face
+                                    p.location = p.last_location
+                                    p.collide_damp = Vector((1.0, 1.0, 0.0))
+                                    break
+
+                                        
                                 
 # Función para comprobar si un punto está dentro de la bounding box de un objeto
 def point_inside_bbox(obj, point):
@@ -437,7 +445,7 @@ def target_moved():
     
     """
     context = bpy.context
-    if context.mode == 'OBJECT':
+    if context.mode == 'OBJECT' and not context.scene.pause:
         update_xpbd(context) 
 
     return bpy.context.scene.ik_timer
@@ -484,6 +492,10 @@ def register():
                                                             min = 0.0001,
                                                             max = 1, 
                                                             default = 0.99)
+
+    bpy.types.Scene.pause = bpy.props.BoolProperty(name = "Pause",
+                                                            description = "Pause the simulation", 
+                                                            default = False)
     
     """ 
         Distance constraint properties

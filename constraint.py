@@ -350,13 +350,12 @@ class EnvironmentCollisionConstraint(Constraint):
     bl_label = "environmtent collision constraint"
     bl_options = {'UNDO'}
     
-    def __init__(self, p1, n, dist, k, damp):
+    def __init__(self, p1, n, k, damp):
         """
             Init function
         
         """
         super().__init__()
-        self.d = dist
         self.particles.extend([p1])
         self.stiffness = k
         self.k_coef = self.stiffness
@@ -371,16 +370,16 @@ class EnvironmentCollisionConstraint(Constraint):
         """
         # get particles involved
         part1 = self.particles[0]
-        x = part1.location
+        x = part1.location 
         
         # get plane normal
-        n = self.n
+        n = self.n.normalized()
         
         # get 1/mass
         w1 = part1.w
 
-        # get C = n * x − d
-        C = n.dot(x) - self.d
+        # get C = n * x
+        C = n.dot(x) 
             
         if C > 0.0001 or C < -0.0001:
             # get ∆Cp1 = n
